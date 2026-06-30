@@ -46,6 +46,16 @@ across the full checkout, then spot-checked each file referenced by `RestSharp.s
 - `.tt` (T4) files: none found.
 - Verdict: **clean** — no UsingTask/Exec/analyzers/T4 found.
 
+### Known build caveat (does not affect analysis)
+A full `dotnet build RestSharp.sln` fails with one error: `test/RestSharp.Tests/RestRequestTests.cs`
+doesn't compile under the `net472` TFM (`CS0246: HttpRequestException could not be found`). Root
+cause: the .NET SDK only adds an implicit `using System.Net.Http;` for non-`.NETFramework` TFMs,
+and this test file relies on that implicit using without an explicit one — it compiles fine under
+the project's other TFM (`net6.0`). This is pre-existing upstream test code, confined to one
+legacy/Windows-only test TFM; `src/RestSharp` (the code our analyzer actually targets) builds
+clean across all of its TFMs (`netstandard2.0`, `net5.0`, `net6.0`). Not a vetting failure and not
+a reason to re-pin — noted here so a future re-vet doesn't have to rediscover it.
+
 ### Packages/symbols expected to drive Step 4 assertions
 - **Newtonsoft.Json** `13.0.1` — referenced by `src/RestSharp.Serializers.NewtonsoftJson/RestSharp.Serializers.NewtonsoftJson.csproj`.
   Non-trivially used in `src/RestSharp.Serializers.NewtonsoftJson/JsonNetSerializer.cs`
