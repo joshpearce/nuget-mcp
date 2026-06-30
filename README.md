@@ -19,6 +19,7 @@ server over **HTTP**, and as a standalone **CLI**.
 | `nuget_mcp_stdio` | console Exe | MCP server over **stdio** — the usual transport for local MCP clients (Claude Code/Desktop). |
 | `nuget_mcp_http` | ASP.NET Core Web | MCP server over **HTTP** (`ModelContextProtocol.AspNetCore`). Binds `localhost:3001` by default. |
 | `nuget_usage_analyzer_cli` | console Exe | Standalone CLI (`System.CommandLine`) for running the same analysis from a terminal or scripts, including batch mode. |
+| `nuget_mcp_core.IntegrationTests` | xUnit test project | Runs the real analyzer against two pinned, vetted real-world OSS fixtures. See [Testing](#testing). |
 
 The two MCP servers expose identical tools (`analyze_package_usage`, `analyze_symbol_usage`);
 they differ only in transport. The CLI wraps the same engine with `analyze`, `symbol`, and
@@ -105,6 +106,25 @@ Analysis results are cached as JSON under your system temp directory in
 `nuget-usage-analysis-cache/`. The cache key includes the target solution's last-write time, so
 editing and saving the `.sln` file invalidates stale results; `--force-refresh` (CLI) bypasses
 the cache explicitly.
+
+## Testing
+
+`nuget_mcp_core.IntegrationTests` runs the real `IPackageUsageAnalyzer` against two real-world
+OSS .NET repos, vendored as pinned git submodules under `test-fixtures/` (security-vetted —
+no custom MSBuild tasks, build-time `Exec` commands, T4 templates, or dedicated Roslyn
+analyzers/source generators; see `test-fixtures/NOTES.md` for the full vetting record and which
+packages/symbols each fixture exercises).
+
+```bash
+git submodule update --init --recursive   # one-time, populates test-fixtures/
+dotnet test nuget_mcp_core.IntegrationTests
+```
+
+Re-run `scripts/vet-fixtures.sh` whenever a fixture's pinned commit is bumped — it automates the
+grep-based half of the vetting checklist.
+
+There is no unit test project yet; CI wiring for either test project is a follow-up, not part of
+this repo's current automation.
 
 ## Design reference
 
