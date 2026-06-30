@@ -2,8 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NugetMcp.Core.Services;
-using NugetMcp.Core.Models.Configuration;
-using NugetMcp.Core.Services.CodeSimilarity;
+using NugetMcp.Core.Extensions;
 using System.CommandLine;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -353,22 +352,7 @@ class Program
             builder.Logging.SetMinimumLevel(LogLevel.Debug);
         }
 
-        builder.Services.AddSingleton<ICacheManager, FileCacheManager>();
-        builder.Services.AddSingleton<ISolutionLoader, RoslynSolutionLoader>();
-        builder.Services.AddSingleton<IPackageAssemblyResolver, NuGetPackageAssemblyResolver>();
-        builder.Services.AddSingleton<ISourceCodeReader, SourceCodeReader>();
-        builder.Services.AddSingleton<IUsageScanner, RoslynUsageScanner>();
-        builder.Services.AddSingleton<IParallelExecutor, TaskParallelExecutor>();
-        builder.Services.AddSingleton<IPackageUsageAnalyzer, PackageUsageAnalyzer>();
-
-        // Configure CodeSimilarity
-        builder.Services.Configure<CodeSimilarityConfiguration>(
-            builder.Configuration.GetSection("CodeSimilarity"));
-        builder.Services.AddSingleton<ICodeSimilarityService, CodeSimilarityService>();
-
-        // Configure UsageTypeFilter
-        builder.Services.Configure<UsageTypeFilterConfiguration>(
-            builder.Configuration.GetSection("UsageTypeFilter"));
+        builder.Services.AddNugetMcpCore(builder.Configuration);
 
         return builder.Build();
     }
