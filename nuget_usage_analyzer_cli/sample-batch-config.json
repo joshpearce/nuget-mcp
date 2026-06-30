@@ -1,0 +1,16 @@
+{
+  "jobs": [
+    {
+      "solutionPath": "/path/to/solution1.sln",
+      "packageName": "Newtonsoft.Json",
+      "packageVersion": "13.0.3",
+      "forceRefresh": false
+    },
+    {
+      "solutionPath": "/path/to/solution2.sln",
+      "packageName": "Microsoft.Extensions.Logging",
+      "packageVersion": "8.0.0",
+      "forceRefresh": true
+    }
+  ]
+}
