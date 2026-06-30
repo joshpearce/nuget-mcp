@@ -11,6 +11,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "nuget_mcp_http", "nuget_mcp
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "nuget_usage_analyzer_cli", "nuget_usage_analyzer_cli\nuget_usage_analyzer_cli.csproj", "{D7FAACE1-5BB3-4D86-966E-B05483C2C2E2}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "nuget_mcp_core.IntegrationTests", "nuget_mcp_core.IntegrationTests\nuget_mcp_core.IntegrationTests.csproj", "{74332711-BED6-4DF5-A52F-405D4031A936}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -36,5 +38,9 @@ Global
 		{D7FAACE1-5BB3-4D86-966E-B05483C2C2E2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D7FAACE1-5BB3-4D86-966E-B05483C2C2E2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D7FAACE1-5BB3-4D86-966E-B05483C2C2E2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{74332711-BED6-4DF5-A52F-405D4031A936}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{74332711-BED6-4DF5-A52F-405D4031A936}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{74332711-BED6-4DF5-A52F-405D4031A936}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{74332711-BED6-4DF5-A52F-405D4031A936}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
