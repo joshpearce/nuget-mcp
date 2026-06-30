@@ -2,8 +2,9 @@ namespace NugetMcp.Core.IntegrationTests;
 
 /// <summary>
 /// Smoke test for <see cref="AnalyzerFixture"/> itself: verifies the shared DI graph resolves
-/// an <see cref="Services.IPackageUsageAnalyzer"/> without throwing. Fixture-repo tests (RestSharp,
-/// eShopOnWeb) are added in a later step.
+/// an <see cref="Services.IPackageUsageAnalyzer"/> without throwing. Fixture-repo tests
+/// (<see cref="RestSharpFixtureTests"/>, <see cref="EShopOnWebFixtureTests"/>) exercise the
+/// analyzer itself; this class only covers fixture construction.
 /// </summary>
 [Collection("AnalyzerCollection")]
 public class AnalyzerFixtureTests

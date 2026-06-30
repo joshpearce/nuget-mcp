@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using NugetMcp.Core.Extensions;
@@ -9,7 +10,7 @@ namespace NugetMcp.Core.IntegrationTests;
 /// Builds the same DI graph as the production frontends (via <see cref="ServiceCollectionExtensions.AddNugetMcpCore"/>)
 /// once per test collection and exposes the resolved <see cref="IPackageUsageAnalyzer"/> for integration tests to share.
 /// </summary>
-public class AnalyzerFixture : IDisposable
+public class AnalyzerFixture : IAsyncLifetime
 {
     public IPackageUsageAnalyzer Analyzer { get; }
 
@@ -45,9 +46,56 @@ public class AnalyzerFixture : IDisposable
         Analyzer = _provider.GetRequiredService<IPackageUsageAnalyzer>();
     }
 
-    public void Dispose()
+    public async Task InitializeAsync()
+    {
+        // PackageUsageAnalyzer.AnalyzeAsync scans every project in a solution in parallel, and each
+        // project independently calls NuGetPackageAssemblyResolver.EnsurePackagesRestoredAsync,
+        // which shells out to `dotnet restore` for the whole solution -- with no de-duplication or
+        // locking across those concurrent calls. On a solution that has never been restored before
+        // (e.g. a freshly checked-out submodule, before any obj/*.nuget.* files exist), that becomes
+        // N simultaneous `dotnet restore` invocations against the same solution, which race on the
+        // same obj/ output files and fail (reproduced reliably: 10 concurrent restores against
+        // eShopOnWeb after `git submodule deinit && update --init`, all exiting 1, leaving every
+        // project's package-assembly resolution empty -- 0 usages found instead of the expected
+        // ~25). A single sequential restore per fixture solution here, before any test runs, makes
+        // the analyzer's later per-project restores fast up-to-date no-ops instead of a race. This
+        // mitigates a real concurrency gap in NuGetPackageAssemblyResolver; fixing it there is a
+        // suggested follow-up (see nuget_mcp_core/CLAUDE.md), out of scope for this test-only fix.
+        foreach (var solutionPath in new[] { FixtureRepoPaths.RestSharpSolution, FixtureRepoPaths.EShopOnWebSolution })
+        {
+            await RestoreAsync(solutionPath);
+        }
+    }
+
+    private static async Task RestoreAsync(string solutionPath)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            Arguments = $"restore \"{solutionPath}\"",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException($"Failed to start 'dotnet restore' for {solutionPath}.");
+
+        var stdErrTask = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"Pre-warm 'dotnet restore {solutionPath}' failed with exit code {process.ExitCode}: {await stdErrTask}");
+        }
+    }
+
+    public Task DisposeAsync()
     {
         _provider.Dispose();
+        return Task.CompletedTask;
     }
 }
 

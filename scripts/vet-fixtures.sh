@@ -51,6 +51,17 @@ while IFS= read -r -d '' f; do
     install_script_files+=("$f")
 done < <(find "$FIXTURES_DIR" \( -iname 'install.ps1' -o -iname 'init.ps1' \) -print0)
 
+# A zero-project-file result almost always means the submodules haven't been
+# checked out yet (e.g. fresh clone before `git submodule update --init
+# --recursive`), not that the fixtures are clean -- fail loudly instead of
+# silently reporting "clean" against nothing.
+if [[ "${#project_files[@]}" -eq 0 ]]; then
+    echo "vet-fixtures: found 0 project/build files under $FIXTURES_DIR -- the fixture" >&2
+    echo "submodules are likely not checked out. Run 'git submodule update --init --recursive'" >&2
+    echo "and re-run this script; a zero-file result is not the same as a clean result." >&2
+    exit 1
+fi
+
 report() {
     local check="$1" file="$2" detail="$3"
     echo "VIOLATION [$check]: $file -- $detail" >&2
