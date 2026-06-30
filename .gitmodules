@@ -1,0 +1,6 @@
+[submodule "test-fixtures/restsharp"]
+	path = test-fixtures/restsharp
+	url = https://github.com/restsharp/RestSharp.git
+[submodule "test-fixtures/eshoponweb"]
+	path = test-fixtures/eshoponweb
+	url = https://github.com/dotnet-architecture/eShopOnWeb.git
