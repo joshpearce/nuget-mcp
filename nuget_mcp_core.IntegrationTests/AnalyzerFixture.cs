@@ -46,6 +46,8 @@ public class AnalyzerFixture : IAsyncLifetime
         Analyzer = _provider.GetRequiredService<IPackageUsageAnalyzer>();
     }
 
+    private static readonly TimeSpan RestoreTimeout = TimeSpan.FromMinutes(5);
+
     public async Task InitializeAsync()
     {
         // PackageUsageAnalyzer.AnalyzeAsync scans every project in a solution in parallel, and each
@@ -82,13 +84,31 @@ public class AnalyzerFixture : IAsyncLifetime
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException($"Failed to start 'dotnet restore' for {solutionPath}.");
 
+        // Both streams must be drained concurrently with the wait, not just stderr: if `dotnet
+        // restore` writes enough stdout to fill the OS pipe buffer (cold cache + restore warnings
+        // can produce far more output than a warm-cache run), the child blocks writing to a full,
+        // unread pipe and never exits -- a classic Process redirect-without-drain deadlock, and
+        // exactly the cold-cache scenario this pre-warm exists for.
+        var stdOutTask = process.StandardOutput.ReadToEndAsync();
         var stdErrTask = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
+
+        using var timeoutCts = new CancellationTokenSource(RestoreTimeout);
+        try
+        {
+            await process.WaitForExitAsync(timeoutCts.Token);
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
+        {
+            process.Kill(entireProcessTree: true);
+            throw new InvalidOperationException(
+                $"Pre-warm 'dotnet restore {solutionPath}' did not complete within {RestoreTimeout}.");
+        }
 
         if (process.ExitCode != 0)
         {
             throw new InvalidOperationException(
-                $"Pre-warm 'dotnet restore {solutionPath}' failed with exit code {process.ExitCode}: {await stdErrTask}");
+                $"Pre-warm 'dotnet restore {solutionPath}' failed with exit code {process.ExitCode}: " +
+                $"{await stdErrTask}{await stdOutTask}");
         }
     }
 
