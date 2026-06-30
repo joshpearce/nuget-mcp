@@ -161,7 +161,12 @@ plus a per-file read of every project referenced by `eShopOnWeb.sln`:
 If either submodule's pinned commit is ever updated, re-run the full checklist above (UsingTask,
 `<Exec>` build events, analyzer/source-generator `PackageReference`s, NuGet install/init scripts,
 `.tt` files) against the new commit, and re-confirm the packages/symbols listed above still match
-(upstream changes can rename, remove, or stop using a given symbol). Once Step 5's
-`scripts/vet-fixtures.sh` exists, run it too — it automates the grep-based half of this checklist,
-but the source-generator/analyzer judgment calls documented above (ecosystem tooling vs. dedicated
-analyzer) still need a human read on any new finding it flags.
+(upstream changes can rename, remove, or stop using a given symbol). Also run
+`scripts/vet-fixtures.sh` — it automates the grep-based half of this checklist (UsingTask, `<Exec>`
+build events, `.tt` files, and dedicated analyzer/source-generator packages or project references
+matched by name), but the source-generator/analyzer judgment calls documented above (ecosystem
+tooling vs. dedicated analyzer) still need a human read on any new finding it flags. The script
+deliberately does not flag a package merely for listing `analyzers` in its `IncludeAssets` (e.g.
+`Microsoft.EntityFrameworkCore.Tools`, `xunit.runner.visualstudio`, `coverlet.collector`) — only a
+package/project whose own name contains `Analyzer`/`SourceGenerator`, or an `OutputItemType="Analyzer"`
+reference, the same distinction drawn manually above.
