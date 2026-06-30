@@ -13,7 +13,10 @@
 # checklist (e.g. conditional build-time targets like BuildBundlerMinifier)
 # still needs the same manual read NOTES.md already gives it.
 
-set -euo pipefail
+# No `-u` (nounset): bash < 4.4 (e.g. macOS's stock /bin/bash 3.2) treats even
+# an explicitly-declared empty array's "${arr[@]}" expansion as unbound under
+# nounset, which would break the empty-results case (e.g. zero .tt files).
+set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -29,10 +32,19 @@ violations=0
 # Collect the project/build files in scope: *.csproj, *.targets, *.props, *.tt
 # (Directory.Build.props / Directory.Build.targets are covered by the *.props
 # / *.targets patterns since find matches on suffix, not exact basename).
-mapfile -d '' project_files < <(find "$FIXTURES_DIR" \
+# Built with a plain `while read -d ''` loop rather than `mapfile -d ''` (bash
+# 4.4+ only) so this also runs under macOS's stock /bin/bash (3.2).
+project_files=()
+while IFS= read -r -d '' f; do
+    project_files+=("$f")
+done < <(find "$FIXTURES_DIR" \
     \( -name '*.csproj' -o -name '*.targets' -o -name '*.props' \) \
     -print0)
-mapfile -d '' tt_files < <(find "$FIXTURES_DIR" -name '*.tt' -print0)
+
+tt_files=()
+while IFS= read -r -d '' f; do
+    tt_files+=("$f")
+done < <(find "$FIXTURES_DIR" -name '*.tt' -print0)
 
 report() {
     local check="$1" file="$2" detail="$3"
