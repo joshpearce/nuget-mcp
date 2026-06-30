@@ -65,8 +65,9 @@ a reason to re-pin — noted here so a future re-vet doesn't have to rediscover 
 - **CsvHelper** `28.0.1` — referenced by `src/RestSharp.Serializers.CsvHelper/RestSharp.Serializers.CsvHelper.csproj`.
   Non-trivially used in `src/RestSharp.Serializers.CsvHelper/CsvHelperSerializer.cs` (`CsvReader`,
   `CsvWriter`, `CsvConfiguration` — both reader and writer code paths implemented), plus
-  `test/RestSharp.Tests.Serializers.Csv/CsvHelperTests.cs`. `CsvReader`/`CsvWriter` together
-  appear ~2 times in source (small but real, both symbols exercised, not just referenced).
+  `test/RestSharp.Tests.Serializers.Csv/CsvHelperTests.cs`. In `CsvHelperSerializer.cs`,
+  `CsvReader` appears 1 time and `CsvWriter` appears 1 time (small but real, both symbols
+  exercised, not just referenced — a per-symbol assertion should expect ~1, not ~2).
 - Explicitly **not** used as an assertion: `Polly` `7.2.3` is referenced by
   `test/RestSharp.Tests.Integrated/RestSharp.Tests.Integrated.csproj` but at this pinned commit
   no `.cs` file actually uses the `Polly` namespace — referenced-but-unused, so it would make a
