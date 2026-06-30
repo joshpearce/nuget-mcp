@@ -23,21 +23,27 @@ internal static class FixtureAnalysisRunner
     {
         try
         {
-            var winner = await Task.WhenAny(analysisTask, Task.Delay(timeout));
+            using var timeoutCts = new CancellationTokenSource();
+            var delayTask = Task.Delay(timeout, timeoutCts.Token);
+
+            var winner = await Task.WhenAny(analysisTask, delayTask);
             if (winner != analysisTask)
             {
                 throw new TimeoutException($"{operationDescription} did not complete within {timeout}.");
             }
 
+            timeoutCts.Cancel();
             return await analysisTask;
         }
         catch (Exception ex)
         {
             throw new InvalidOperationException(
                 $"{operationDescription} failed against fixture={fixtureName} (pinned commit {pinnedSha}, " +
-                $"solution={solutionPath}). This usually indicates a submodule checkout or build problem " +
-                "rather than an analyzer logic bug -- verify 'git submodule update --init --recursive' was run " +
-                "and the pinned commit still builds. See inner exception for details.",
+                $"solution={solutionPath}). Per nuget_mcp_core/CLAUDE.md, AnalyzeSymbolAsync rethrows " +
+                "top-level failures (a genuine analyzer bug is one possibility), while a timeout or an " +
+                "unexpected exception from AnalyzeAsync more often points at a submodule checkout or build " +
+                "problem instead -- verify 'git submodule update --init --recursive' was run and the pinned " +
+                "commit still builds, then check the inner exception for details either way.",
                 ex);
         }
     }

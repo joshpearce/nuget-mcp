@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Automates the grep-based half of the fixture vetting checklist documented in
 # test-fixtures/NOTES.md (UsingTask, Exec build events, T4 templates, dedicated
-# analyzer/source-generator packages). Re-run this on every pinned-commit bump,
-# not just at initial vendoring.
+# analyzer/source-generator packages, NuGet install/restore scripts). Re-run
+# this on every pinned-commit bump, not just at initial vendoring.
 #
 # This does NOT replace human judgment: it distinguishes a dedicated analyzer/
 # source-generator package (flagged) from an ecosystem tooling package that
@@ -46,6 +46,11 @@ while IFS= read -r -d '' f; do
     tt_files+=("$f")
 done < <(find "$FIXTURES_DIR" -name '*.tt' -print0)
 
+install_script_files=()
+while IFS= read -r -d '' f; do
+    install_script_files+=("$f")
+done < <(find "$FIXTURES_DIR" \( -iname 'install.ps1' -o -iname 'init.ps1' \) -print0)
+
 report() {
     local check="$1" file="$2" detail="$3"
     echo "VIOLATION [$check]: $file -- $detail" >&2
@@ -71,7 +76,12 @@ for f in "${tt_files[@]}"; do
     report "T4" "$f" "T4 template file present"
 done
 
-# 4. Dedicated analyzer/source-generator packages or project references.
+# 4. NuGet install/init PowerShell scripts -- arbitrary code execution on package install.
+for f in "${install_script_files[@]}"; do
+    report "InstallScript" "$f" "NuGet install/init PowerShell script present"
+done
+
+# 5. Dedicated analyzer/source-generator packages or project references.
 #    Matches on the package/project name itself (e.g. NSubstitute.Analyzers.CSharp,
 #    a project named SourceGenerator), not on IncludeAssets="...analyzers..."
 #    metadata, since many legitimate ecosystem tooling packages set that asset
@@ -86,11 +96,13 @@ for f in "${project_files[@]}"; do
     done < <(grep -inE 'OutputItemType="Analyzer"' "$f" || true)
 done
 
+file_count_summary="${#project_files[@]} project/build file(s), ${#tt_files[@]} .tt file(s), ${#install_script_files[@]} install-script file(s)"
+
 if [[ "$violations" -gt 0 ]]; then
     echo "" >&2
-    echo "vet-fixtures: $violations violation(s) found across ${#project_files[@]} project/build file(s) and ${#tt_files[@]} .tt file(s)." >&2
+    echo "vet-fixtures: $violations violation(s) found across $file_count_summary." >&2
     exit 1
 fi
 
-echo "vet-fixtures: clean -- no UsingTask/Exec/T4/dedicated-analyzer patterns found across ${#project_files[@]} project/build file(s) and ${#tt_files[@]} .tt file(s)."
+echo "vet-fixtures: clean -- no UsingTask/Exec/T4/install-script/dedicated-analyzer patterns found across $file_count_summary."
 exit 0

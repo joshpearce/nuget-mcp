@@ -163,8 +163,8 @@ If either submodule's pinned commit is ever updated, re-run the full checklist a
 `.tt` files) against the new commit, and re-confirm the packages/symbols listed above still match
 (upstream changes can rename, remove, or stop using a given symbol). Also run
 `scripts/vet-fixtures.sh` — it automates the grep-based half of this checklist (UsingTask, `<Exec>`
-build events, `.tt` files, and dedicated analyzer/source-generator packages or project references
-matched by name), but the source-generator/analyzer judgment calls documented above (ecosystem
+build events, `.tt` files, NuGet `install.ps1`/`init.ps1` scripts, and dedicated analyzer/source-generator
+packages or project references matched by name), but the source-generator/analyzer judgment calls documented above (ecosystem
 tooling vs. dedicated analyzer) still need a human read on any new finding it flags. The script
 deliberately does not flag a package merely for listing `analyzers` in its `IncludeAssets` (e.g.
 `Microsoft.EntityFrameworkCore.Tools`, `xunit.runner.visualstudio`, `coverlet.collector`) — only a
