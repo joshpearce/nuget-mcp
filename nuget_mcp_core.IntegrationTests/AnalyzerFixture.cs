@@ -13,6 +13,20 @@ public class AnalyzerFixture
 {
     public IPackageUsageAnalyzer Analyzer { get; }
 
+    static AnalyzerFixture()
+    {
+        // Disables MSBuild's node-reuse IPC. Without this, the in-process MSBuildWorkspace used by
+        // RoslynSolutionLoader (for symbol analysis) and the `dotnet restore` child process shelled
+        // out by NuGetPackageAssemblyResolver (for package analysis) can negotiate over the same
+        // node-reuse pipe and deadlock when both touch the same solution within this test process
+        // -- reproduced reliably running RestSharpFixtureTests' symbol test followed by its package
+        // test, hanging until the per-test timeout. Setting this before any MSBuild activity starts
+        // (and before the env var is read by ProcessStartInfo for the restore child process) avoids
+        // the deadlock; the production frontends never run two analyses in one process, so they
+        // don't need this.
+        Environment.SetEnvironmentVariable("MSBUILDDISABLENODEREUSE", "1");
+    }
+
     public AnalyzerFixture()
     {
         var configuration = new ConfigurationBuilder().Build();
