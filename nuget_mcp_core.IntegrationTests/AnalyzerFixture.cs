@@ -74,12 +74,13 @@ public class AnalyzerFixture : IAsyncLifetime
         var startInfo = new ProcessStartInfo
         {
             FileName = "dotnet",
-            Arguments = $"restore \"{solutionPath}\"",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
+        startInfo.ArgumentList.Add("restore");
+        startInfo.ArgumentList.Add(solutionPath);
 
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException($"Failed to start 'dotnet restore' for {solutionPath}.");
@@ -88,7 +89,9 @@ public class AnalyzerFixture : IAsyncLifetime
         // restore` writes enough stdout to fill the OS pipe buffer (cold cache + restore warnings
         // can produce far more output than a warm-cache run), the child blocks writing to a full,
         // unread pipe and never exits -- a classic Process redirect-without-drain deadlock, and
-        // exactly the cold-cache scenario this pre-warm exists for.
+        // exactly the cold-cache scenario this pre-warm exists for. Both are awaited (or, on the
+        // timeout path, observed-and-discarded) on every exit so neither is left as an unobserved
+        // task once `process` is disposed and the streams it owns go away.
         var stdOutTask = process.StandardOutput.ReadToEndAsync();
         var stdErrTask = process.StandardError.ReadToEndAsync();
 
@@ -100,15 +103,34 @@ public class AnalyzerFixture : IAsyncLifetime
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
         {
             process.Kill(entireProcessTree: true);
+            await ObserveAsync(stdOutTask, stdErrTask);
             throw new InvalidOperationException(
                 $"Pre-warm 'dotnet restore {solutionPath}' did not complete within {RestoreTimeout}.");
         }
 
+        var stdOut = await stdOutTask;
+        var stdErr = await stdErrTask;
+
         if (process.ExitCode != 0)
         {
             throw new InvalidOperationException(
-                $"Pre-warm 'dotnet restore {solutionPath}' failed with exit code {process.ExitCode}: " +
-                $"{await stdErrTask}{await stdOutTask}");
+                $"Pre-warm 'dotnet restore {solutionPath}' failed with exit code {process.ExitCode}: {stdErr}{stdOut}");
+        }
+    }
+
+    private static async Task ObserveAsync(params Task[] tasks)
+    {
+        foreach (var task in tasks)
+        {
+            try
+            {
+                await task;
+            }
+            catch (Exception)
+            {
+                // Already reporting the timeout as the real failure; just prevent an unobserved
+                // exception from a stream read that lost its source process mid-read.
+            }
         }
     }
 
