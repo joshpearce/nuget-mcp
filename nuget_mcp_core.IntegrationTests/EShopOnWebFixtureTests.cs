@@ -1,5 +1,3 @@
-using NugetMcp.Core.Models;
-
 namespace NugetMcp.Core.IntegrationTests;
 
 /// <summary>
@@ -27,9 +25,9 @@ public class EShopOnWebFixtureTests
     [Fact]
     public async Task AnalyzeAsync_ArdalisGuardClauses_FindsGuardUsages()
     {
-        var result = await RunAnalysisAsync(
+        var result = await FixtureAnalysisRunner.RunAsync(
             _fixture.Analyzer.AnalyzeAsync(SolutionPath, "Ardalis.GuardClauses", "4.0.1", forceRefresh: true),
-            "AnalyzeAsync(Ardalis.GuardClauses 4.0.1)");
+            "AnalyzeAsync(Ardalis.GuardClauses 4.0.1)", FixtureName, PinnedSha, SolutionPath, AnalysisTimeout);
 
         Assert.True(result.Errors.Count == 0,
             $"Expected no analysis errors, got: [{string.Join("; ", result.Errors)}]. " +
@@ -64,9 +62,9 @@ public class EShopOnWebFixtureTests
         // in test-fixtures/NOTES.md: `CatalogContext : DbContext` in
         // src/Infrastructure/Data/CatalogContext.cs (the solution's only direct `: DbContext`
         // base-class reference -- AppIdentityDbContext derives from IdentityDbContext<T> instead).
-        var result = await RunAnalysisAsync(
+        var result = await FixtureAnalysisRunner.RunAsync(
             _fixture.Analyzer.AnalyzeSymbolAsync(SolutionPath, "Microsoft.EntityFrameworkCore.DbContext", forceRefresh: true),
-            "AnalyzeSymbolAsync(Microsoft.EntityFrameworkCore.DbContext)");
+            "AnalyzeSymbolAsync(Microsoft.EntityFrameworkCore.DbContext)", FixtureName, PinnedSha, SolutionPath, AnalysisTimeout);
 
         Assert.True(result.Errors.Count == 0,
             $"Expected no analysis errors, got: [{string.Join("; ", result.Errors)}]. " +
@@ -81,37 +79,5 @@ public class EShopOnWebFixtureTests
         Assert.True(usageCount is >= 1 and <= 5,
             $"Expected Microsoft.EntityFrameworkCore.DbContext usage count in range [1, 5], got {usageCount}. " +
             $"fixture={FixtureName} pinned={PinnedSha}");
-    }
-
-    /// <summary>
-    /// Awaits <paramref name="analysisTask"/> with a generous per-fixture timeout (real
-    /// MSBuildWorkspace + Roslyn analysis against a multi-project solution). <see
-    /// cref="IPackageUsageAnalyzer"/>'s methods don't accept a <see cref="CancellationToken"/>, so
-    /// this can't truly cancel the underlying work on timeout -- it stops waiting for it and fails
-    /// fast with a clear, attributable message instead. Any exception (including our own
-    /// synthesized timeout) is wrapped so the failure message always names the fixture and its
-    /// pinned commit, distinguishing "fixture/build is broken" from "an assertion below failed".
-    /// </summary>
-    private static async Task<AnalysisResult> RunAnalysisAsync(Task<AnalysisResult> analysisTask, string operationDescription)
-    {
-        try
-        {
-            var winner = await Task.WhenAny(analysisTask, Task.Delay(AnalysisTimeout));
-            if (winner != analysisTask)
-            {
-                throw new TimeoutException($"{operationDescription} did not complete within {AnalysisTimeout}.");
-            }
-
-            return await analysisTask;
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException(
-                $"{operationDescription} failed against fixture={FixtureName} (pinned commit {PinnedSha}, " +
-                $"solution={SolutionPath}). This usually indicates a submodule checkout or build problem " +
-                "rather than an analyzer logic bug -- verify 'git submodule update --init --recursive' was run " +
-                "and the pinned commit still builds. See inner exception for details.",
-                ex);
-        }
     }
 }

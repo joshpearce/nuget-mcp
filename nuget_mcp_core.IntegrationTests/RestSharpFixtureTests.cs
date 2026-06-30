@@ -1,38 +1,4 @@
-using NugetMcp.Core.Models;
-
 namespace NugetMcp.Core.IntegrationTests;
-
-/// <summary>
-/// Resolves paths to the vendored fixture solutions relative to the repo root, regardless of the
-/// working directory `dotnet test` happens to be invoked from. Walks up from the test assembly's
-/// own output directory (<see cref="AppContext.BaseDirectory"/>) looking for the repo-root marker
-/// file (<c>nuget_mcp.sln</c>) rather than assuming a fixed relative offset, since the number of
-/// `bin/<Configuration>/<TFM>` segments under the output directory is an implementation detail of
-/// the SDK/test host, not something we should hard-code.
-/// </summary>
-internal static class FixtureRepoPaths
-{
-    private static readonly Lazy<string> RepoRoot = new(LocateRepoRoot);
-
-    public static string RestSharpSolution => Path.Combine(RepoRoot.Value, "test-fixtures", "restsharp", "RestSharp.sln");
-
-    public static string EShopOnWebSolution => Path.Combine(RepoRoot.Value, "test-fixtures", "eshoponweb", "eShopOnWeb.sln");
-
-    private static string LocateRepoRoot()
-    {
-        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
-        {
-            if (File.Exists(Path.Combine(dir.FullName, "nuget_mcp.sln")))
-            {
-                return dir.FullName;
-            }
-        }
-
-        throw new InvalidOperationException(
-            $"Could not locate the repo root (a directory containing 'nuget_mcp.sln') by walking up " +
-            $"from the test assembly's output directory '{AppContext.BaseDirectory}'.");
-    }
-}
 
 /// <summary>
 /// Integration tests that run the real analysis engine against the vendored RestSharp fixture
@@ -59,9 +25,9 @@ public class RestSharpFixtureTests
     [Fact]
     public async Task AnalyzeAsync_NewtonsoftJson_FindsJsonSerializerUsages()
     {
-        var result = await RunAnalysisAsync(
+        var result = await FixtureAnalysisRunner.RunAsync(
             _fixture.Analyzer.AnalyzeAsync(SolutionPath, "Newtonsoft.Json", "13.0.1", forceRefresh: true),
-            "AnalyzeAsync(Newtonsoft.Json 13.0.1)");
+            "AnalyzeAsync(Newtonsoft.Json 13.0.1)", FixtureName, PinnedSha, SolutionPath, AnalysisTimeout);
 
         Assert.True(result.Errors.Count == 0,
             $"Expected no analysis errors, got: [{string.Join("; ", result.Errors)}]. " +
@@ -90,9 +56,9 @@ public class RestSharpFixtureTests
     [Fact]
     public async Task AnalyzeSymbolAsync_CsvHelperCsvReader_FindsUsages()
     {
-        var result = await RunAnalysisAsync(
+        var result = await FixtureAnalysisRunner.RunAsync(
             _fixture.Analyzer.AnalyzeSymbolAsync(SolutionPath, "CsvHelper.CsvReader", forceRefresh: true),
-            "AnalyzeSymbolAsync(CsvHelper.CsvReader)");
+            "AnalyzeSymbolAsync(CsvHelper.CsvReader)", FixtureName, PinnedSha, SolutionPath, AnalysisTimeout);
 
         Assert.True(result.Errors.Count == 0,
             $"Expected no analysis errors, got: [{string.Join("; ", result.Errors)}]. " +
@@ -111,37 +77,5 @@ public class RestSharpFixtureTests
         Assert.True(csvReaderUsageCount is >= 3 and <= 15,
             $"Expected CsvHelper.CsvReader usage count in range [3, 15], got {csvReaderUsageCount}. " +
             $"fixture={FixtureName} pinned={PinnedSha}");
-    }
-
-    /// <summary>
-    /// Awaits <paramref name="analysisTask"/> with a generous per-fixture timeout (real
-    /// MSBuildWorkspace + Roslyn analysis against a multi-project solution). <see
-    /// cref="IPackageUsageAnalyzer"/>'s methods don't accept a <see cref="CancellationToken"/>, so
-    /// this can't truly cancel the underlying work on timeout -- it stops waiting for it and fails
-    /// fast with a clear, attributable message instead. Any exception (including our own
-    /// synthesized timeout) is wrapped so the failure message always names the fixture and its
-    /// pinned commit, distinguishing "fixture/build is broken" from "an assertion below failed".
-    /// </summary>
-    private static async Task<AnalysisResult> RunAnalysisAsync(Task<AnalysisResult> analysisTask, string operationDescription)
-    {
-        try
-        {
-            var winner = await Task.WhenAny(analysisTask, Task.Delay(AnalysisTimeout));
-            if (winner != analysisTask)
-            {
-                throw new TimeoutException($"{operationDescription} did not complete within {AnalysisTimeout}.");
-            }
-
-            return await analysisTask;
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException(
-                $"{operationDescription} failed against fixture={FixtureName} (pinned commit {PinnedSha}, " +
-                $"solution={SolutionPath}). This usually indicates a submodule checkout or build problem " +
-                "rather than an analyzer logic bug -- verify 'git submodule update --init --recursive' was run " +
-                "and the pinned commit still builds. See inner exception for details.",
-                ex);
-        }
     }
 }
