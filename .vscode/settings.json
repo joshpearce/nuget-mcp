@@ -1,0 +1,7 @@
+{
+  "git.detectSubmodules": false,
+  "git.ignoredRepositories": [
+    "test-fixtures/eshoponweb",
+    "test-fixtures/restsharp"
+  ]
+}
