@@ -39,11 +39,11 @@ internal static class FixtureAnalysisRunner
             {
                 throw new InvalidOperationException(
                     $"{operationDescription} failed against fixture={fixtureName} (pinned commit {pinnedSha}, " +
-                    $"solution={solutionPath}). Per nuget_mcp_core/CLAUDE.md, AnalyzeSymbolAsync rethrows " +
-                    "top-level failures (a genuine analyzer bug is one possibility), while a timeout or an " +
-                    "unexpected exception from AnalyzeAsync more often points at a submodule checkout or build " +
-                    "problem instead -- verify 'git submodule update --init --recursive' was run and the pinned " +
-                    "commit still builds, then check the inner exception for details either way.",
+                    $"solution={solutionPath}). Per nuget_mcp_core/CLAUDE.md, both AnalyzeAsync and " +
+                    "AnalyzeSymbolAsync rethrow top-level failures (a genuine analyzer bug is one " +
+                    "possibility), while a timeout or an unexpected exception more often points at a submodule " +
+                    "checkout or build problem instead -- verify 'git submodule update --init --recursive' was " +
+                    "run and the pinned commit still builds, then check the inner exception for details either way.",
                     ex);
             }
         }

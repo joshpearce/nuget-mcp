@@ -72,18 +72,13 @@ public class PackageUsageAnalyzer : IPackageUsageAnalyzer
         }
         catch (Exception ex)
         {
+            // Top-level failures (bad path, solution won't load, MSBuild failure) mean the analysis
+            // never ran -- rethrow rather than returning a success-shaped result with 0 usages, which
+            // a caller could misread as "package not used". Per-project failures are still captured as
+            // Errors entries in PerformAnalysisAsync. This mirrors AnalyzeSymbolAsync's contract.
             _logger.LogError(ex, "Failed to analyze package {PackageName}@{PackageVersion} in solution {SolutionPath}",
                 packageName, packageVersion, solutionPath);
-            
-            return new AnalysisResult
-            {
-                SolutionPath = solutionPath,
-                PackageName = packageName,
-                PackageVersion = packageVersion,
-                AnalyzedAt = DateTime.UtcNow,
-                AnalysisDuration = stopwatch.Elapsed,
-                Errors = new List<string> { ex.Message }
-            };
+            throw;
         }
     }
 
