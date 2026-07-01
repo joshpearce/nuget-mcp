@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "nuget-usage": {
+      "command": "/Users/josh/code/nuget_context/nuget_mcp_stdio/bin/Debug/net8.0/nuget_mcp_stdio",
+      "args": [],
+      "env": {}
+    }
+  }
+}
