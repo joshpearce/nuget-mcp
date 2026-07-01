@@ -63,7 +63,12 @@ public class AnalyzerFixture : IAsyncLifetime
         // the analyzer's later per-project restores fast up-to-date no-ops instead of a race. This
         // mitigates a real concurrency gap in NuGetPackageAssemblyResolver; fixing it there is a
         // suggested follow-up (see nuget_mcp_core/CLAUDE.md), out of scope for this test-only fix.
-        foreach (var solutionPath in new[] { FixtureRepoPaths.RestSharpSolution, FixtureRepoPaths.EShopOnWebSolution })
+        foreach (var solutionPath in new[]
+                 {
+                     FixtureRepoPaths.RestSharpSolution,
+                     FixtureRepoPaths.EShopOnWebSolution,
+                     FixtureRepoPaths.SharpZipLibCveSolution,
+                 })
         {
             await RestoreAsync(solutionPath);
         }

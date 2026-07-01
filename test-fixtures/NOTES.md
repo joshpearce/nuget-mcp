@@ -156,6 +156,73 @@ plus a per-file read of every project referenced by `eShopOnWeb.sln`:
   `src/BlazorShared/BlazorShared.csproj` but no `.cs` file in the tree uses
   `FluentValidation`/`AbstractValidator` at this pinned commit — referenced-but-unused.
 
+## 3. SharpZipLib CVE reachability fixture (`test-fixtures/sharpziplib-cve`)
+
+Unlike the other two, this is **not** a vendored submodule — it is a small, in-repo synthetic
+solution authored for this repo (see `plans/cve-usage-detection-fixture.md`, Phase 3). It exists to
+demonstrate the product thesis "references a vulnerable dependency version, but the dangerous code
+path is never called": given a CVE whose vulnerable functionality is a distinct API surface, decide
+whether a consumer actually *exercises* that surface rather than merely referencing the package.
+
+Why synthetic and not a real repo (Phase 2 outcome): a GitHub code search for OSS consumers pinning
+an affected SharpZipLib version surfaced candidates, but none fit the fixture constraints
+(cross-platform, SDK-style, single vanilla `.sln`, `MSBuildWorkspace`-loadable, and providing *both*
+a safe negative control and an exposed positive control in one loadable solution). The two closest:
+`Snoothy/UCR`'s app projects are legacy non-SDK **WPF `net45` `WinExe`** (won't load under
+`MSBuildWorkspace` on non-Windows / the .NET 8 SDK), and its only affected-version reference lives in
+a `netcoreapp2.1` build-automation project; `huobazi/dackup` is an SDK-style `netcoreapp3.1` backup
+tool on `1.2.0` but it inherently *extracts* (so it's an exposed consumer, not safe-only) and pulls a
+heavy/fragile dependency graph (AWS, Aliyun, Mongo, MySQL, Redis, preview packages). A hand-authored
+pair gives full control, cross-platform `net8.0`, trivial vetting, and both controls at once.
+
+- Provenance: authored in-repo (no upstream, no submodule, no pinned commit).
+- Solution: `SharpZipLibCve.sln` (2 leaf projects, both `net8.0` class libraries):
+  - `SafeConsumer/` — a log-bundling utility. Uses SharpZipLib **only** on the safe surface
+    (`GZipOutputStream` stream compression + `ZipOutputStream`/`ZipEntry` archive *creation*).
+    References **none** of the vulnerable types, so it is the negative control at both type- and
+    member-targeting granularity.
+  - `ExposedConsumer/` — a plugin-package installer. Extracts untrusted archives via the vulnerable
+    surface (`FastZip.ExtractZip`, `TarArchive.ExtractContents`, hand-rolled `ZipInputStream`), and
+    also calls the benign `FastZip.CreateZip` on the same `FastZip` type so the fixture can show
+    member-level targeting discriminating extract from create. This is the positive control.
+- Both projects pin **`SharpZipLib` 1.3.1** — an affected release (ZIP zip-slip fixed in 1.3.3).
+  `dotnet restore`/build succeeds; it emits the expected `NU1903`/`NU1902` known-vulnerability
+  warnings, which are intentional here (that's the whole premise) and do not fail restore or the
+  design-time `MSBuildWorkspace` load the analyzer performs. The solution is deliberately **not**
+  part of `nuget_mcp.sln`, so a normal repo build never compiles a knowingly-vulnerable package.
+
+### CVE facts (the reachability signature this fixture encodes)
+- Package: `SharpZipLib`. CVEs: **CVE-2021-32842** (ZIP), **CVE-2021-32840 / -32841** (TAR) —
+  directory traversal / zip-slip on archive extraction → arbitrary file write → potential RCE.
+  Advisory GHSA-m22m-h4rf-pwq3 (high). Affected: ZIP `0.86.0`–`1.3.1`, TAR `0.86.0`–`1.3.2`.
+  **Fixed in `1.3.3`** (fix commit `5c3b293de5d65b108e7f2cd0ea8f81c1b8273f78`).
+- Full signature + the empirically-verified symbol-string matching rules live in
+  `plans/cve-usage-detection-phase1-signature.md`.
+
+### Vetting results (SharpZipLib fixture)
+Authored in-repo, so vetting is trivial by construction, but confirmed the same way as the others:
+- `UsingTask`: none. `<Exec>` build events: none. `.tt` T4 files: none. `install.ps1`/`init.ps1`:
+  none. Analyzer/source-generator package or project references: none — the only `PackageReference`
+  in either project is `SharpZipLib` itself.
+- `scripts/vet-fixtures.sh` reports **clean** with these projects present.
+- Verdict: **clean**.
+
+### Packages/symbols expected to drive the integration-test assertions
+Verified via the analyzer against the pinned `1.3.1` (each member call site yields ~2 usages — a
+`MethodInvocation` on the member-access node plus a `PropertyAccess`/`Direct` on the method-name
+identifier; each `new T()` type site yields ~3; so assertions use ranges, not exact counts):
+- `ICSharpCode.SharpZipLib.Zip.FastZip.ExtractZip(string, string, string)` — **2** usages, all in
+  `ExposedConsumer`; **0** in `SafeConsumer`. (Note: the member target must include the exact
+  parameter-type list; the bare `...FastZip.ExtractZip` matches nothing.)
+- `ICSharpCode.SharpZipLib.Tar.TarArchive.ExtractContents(string)` — **2**, all `ExposedConsumer`.
+- `ICSharpCode.SharpZipLib.Zip.ZipInputStream` (type) — **3**, all `ExposedConsumer`.
+- `ICSharpCode.SharpZipLib.GZip.GZipOutputStream` (type) — **3**, all `SafeConsumer` — asserts the
+  safe consumer *does* use the library, so its zero vulnerable-symbol count means "not called," not
+  "library unused."
+- `ICSharpCode.SharpZipLib.Zip.FastZip.CreateZip(string, string, bool, string)` — **2**, all
+  `ExposedConsumer` (the benign `Repackage`), distinct from `ExtractZip` — demonstrates member-level
+  precision on the dual-use `FastZip` type.
+
 ## Re-vetting on pin bumps
 
 If either submodule's pinned commit is ever updated, re-run the full checklist above (UsingTask,

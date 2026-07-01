@@ -8,6 +8,14 @@ package or a single symbol), it uses Roslyn semantic analysis to find every real
 returns a structured `AnalysisResult`. Exists so the stdio server, HTTP server, and CLI share
 one implementation and one set of contracts.
 
+`AnalyzeSymbolAsync` doubles as a **CVE-usage reachability** check: point it at a CVE's vulnerable
+symbol(s) to decide whether a solution actually calls the vulnerable API vs merely referencing a
+vulnerable version. Capability, the reusable "signature" data shape, and the necessary-not-sufficient
+limits are written up in `plans/cve-reachability-capability.md`; a worked SharpZipLib example (with
+the exact symbol-string matching rules) is in `plans/cve-usage-detection-phase1-signature.md`, and
+the demonstrating fixture + tests are `test-fixtures/sharpziplib-cve` (NOTES.md §3) and
+`nuget_mcp_core.IntegrationTests/SharpZipLibCveFixtureTests.cs`.
+
 ## Contracts
 - **Exposes**: `IPackageUsageAnalyzer` with `AnalyzeAsync(solutionPath, packageName, packageVersion, forceRefresh, contextLines, usageTypeFilters?)` and `AnalyzeSymbolAsync(solutionPath, targetSymbol, forceRefresh, contextLines, usageTypeFilters?)`. Both return `AnalysisResult` (usages + analyzed projects + errors + duration).
 - **Exposes**: `Extensions/ServiceCollectionExtensions.AddNugetMcpCore(IServiceCollection, IConfiguration)` — registers the full service graph (the 7 singletons + `CodeSimilarity`/`UsageTypeFilter` config binding) in one call. All three frontends and `nuget_mcp_core.IntegrationTests` call this instead of duplicating the registration list; it expects logging already registered on the `IServiceCollection` (`ILogger<T>` for every service) — `Host.CreateApplicationBuilder`/`WebApplication.CreateBuilder` provide this for free, a bare `ServiceCollection` needs an explicit `.AddLogging()` first.

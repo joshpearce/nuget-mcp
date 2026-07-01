@@ -16,6 +16,13 @@ internal static class FixtureRepoPaths
 
     public static string EShopOnWebSolution => Path.Combine(RepoRoot.Value, "test-fixtures", "eshoponweb", "eShopOnWeb.sln");
 
+    /// <summary>
+    /// In-repo synthetic fixture (not a submodule) demonstrating CVE-usage reachability for
+    /// SharpZipLib's zip-slip CVEs. See <c>test-fixtures/sharpziplib-cve</c> and
+    /// <c>test-fixtures/NOTES.md</c> §3.
+    /// </summary>
+    public static string SharpZipLibCveSolution => Path.Combine(RepoRoot.Value, "test-fixtures", "sharpziplib-cve", "SharpZipLibCve.sln");
+
     private static string LocateRepoRoot()
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
