@@ -10,6 +10,14 @@ public class NuGetPackageAssemblyResolver : IPackageAssemblyResolver
 {
     private readonly ILogger<NuGetPackageAssemblyResolver> _logger;
     private readonly ConcurrentDictionary<string, HashSet<string>> _assemblyCache = new();
+    // One restore Task per solution directory. A solution's projects are scanned in parallel and each
+    // calls EnsurePackagesRestoredAsync, but `dotnet restore` here restores the *whole solution* -- so
+    // running it per project means N concurrent identical full-solution restores. Deduplicating to a
+    // single shared Task per solution dir (for this singleton resolver's lifetime, matching the
+    // process-wide _assemblyCache) both fixes the concurrent-restore race that silently produced 0
+    // usages on a never-restored solution and collapses the pile of MSBuild worker nodes those N
+    // restores would otherwise spawn.
+    private readonly ConcurrentDictionary<string, Lazy<Task>> _restoreTasks = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _globalPackagesPath;
 
     public NuGetPackageAssemblyResolver(ILogger<NuGetPackageAssemblyResolver> logger)
@@ -95,48 +103,74 @@ public class NuGetPackageAssemblyResolver : IPackageAssemblyResolver
         return fallbackPath;
     }
 
-    private async Task EnsurePackagesRestoredAsync(Project project)
+    private Task EnsurePackagesRestoredAsync(Project project)
+    {
+        var solutionDir = Path.GetDirectoryName(project.Solution.FilePath);
+        if (string.IsNullOrEmpty(solutionDir))
+        {
+            _logger.LogWarning("Could not determine solution directory for package restore");
+            return Task.CompletedTask;
+        }
+
+        // Restore the whole solution at most once regardless of how many projects ask concurrently.
+        // GetOrAdd may build more than one Lazy under a race, but only the stored one's .Value runs,
+        // so the underlying RestoreSolutionAsync executes a single time per solution directory.
+        return _restoreTasks
+            .GetOrAdd(solutionDir, dir => new Lazy<Task>(() => RestoreSolutionAsync(dir)))
+            .Value;
+    }
+
+    private async Task RestoreSolutionAsync(string solutionDir)
     {
         try
         {
-            var solutionDir = Path.GetDirectoryName(project.Solution.FilePath);
-            if (string.IsNullOrEmpty(solutionDir))
-            {
-                _logger.LogWarning("Could not determine solution directory for package restore");
-                return;
-            }
-
             _logger.LogDebug("Ensuring packages are restored for solution at {SolutionPath}", solutionDir);
 
             var startInfo = new ProcessStartInfo
             {
                 FileName = "dotnet",
-                Arguments = "restore",
                 WorkingDirectory = solutionDir,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+            startInfo.ArgumentList.Add("restore");
+            // --disable-build-servers makes the child restore run with `/nodeReuse:false` (plus no
+            // shared compilation / Razor build server), so the MSBuild worker nodes it spawns exit
+            // when restore finishes instead of lingering ~15 min for reuse and slowing every later
+            // `dotnet` command on the machine. The process-wide MSBUILDDISABLENODEREUSE env var alone
+            // did not reach these child nodes (they still reported /nodeReuse:true); passing the
+            // intent explicitly on the CLI does.
+            startInfo.ArgumentList.Add("--disable-build-servers");
             // `dotnet restore` runs MSBuild; strip the MSBuildLocator env vars this host inherited so
             // the child resolves one self-consistent SDK (see DotnetProcessEnvironment for why).
             DotnetProcessEnvironment.StripMSBuildLocatorVariables(startInfo);
 
             using var process = Process.Start(startInfo);
-            if (process != null)
+            if (process == null)
             {
-                var output = await process.StandardOutput.ReadToEndAsync();
-                var error = await process.StandardError.ReadToEndAsync();
-                await process.WaitForExitAsync();
+                _logger.LogWarning("Failed to start 'dotnet restore' for {SolutionPath}", solutionDir);
+                return;
+            }
 
-                if (process.ExitCode == 0)
-                {
-                    _logger.LogDebug("Package restore completed successfully");
-                }
-                else
-                {
-                    _logger.LogWarning("Package restore failed with exit code {ExitCode}. Error: {Error}", process.ExitCode, error);
-                }
+            // Drain both streams concurrently with the wait: reading stdout to EOF first and only
+            // then stderr can deadlock if the child fills the stderr pipe buffer (a cold-cache
+            // restore can emit a lot on both) -- it blocks writing to an unread pipe and never exits,
+            // so stdout never reaches EOF either.
+            var stdOutTask = process.StandardOutput.ReadToEndAsync();
+            var stdErrTask = process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+            await stdOutTask;
+            var error = await stdErrTask;
+
+            if (process.ExitCode == 0)
+            {
+                _logger.LogDebug("Package restore completed successfully");
+            }
+            else
+            {
+                _logger.LogWarning("Package restore failed with exit code {ExitCode}. Error: {Error}", process.ExitCode, error);
             }
         }
         catch (Exception ex)
