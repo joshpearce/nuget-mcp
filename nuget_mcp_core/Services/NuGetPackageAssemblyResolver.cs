@@ -118,6 +118,9 @@ public class NuGetPackageAssemblyResolver : IPackageAssemblyResolver
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+            // `dotnet restore` runs MSBuild; strip the MSBuildLocator env vars this host inherited so
+            // the child resolves one self-consistent SDK (see DotnetProcessEnvironment for why).
+            DotnetProcessEnvironment.StripMSBuildLocatorVariables(startInfo);
 
             using var process = Process.Start(startInfo);
             if (process != null)

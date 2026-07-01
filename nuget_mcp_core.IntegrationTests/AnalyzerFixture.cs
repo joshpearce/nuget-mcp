@@ -81,6 +81,11 @@ public class AnalyzerFixture : IAsyncLifetime
         };
         startInfo.ArgumentList.Add("restore");
         startInfo.ArgumentList.Add(solutionPath);
+        // The fixture ctor resolves IPackageUsageAnalyzer, which constructs RoslynSolutionLoader and
+        // runs MSBuildLocator.RegisterDefaults() -- pinning MSBuild env vars to the SDK matching this
+        // net8 test host (e.g. 8.0.422). This pre-warm restore would otherwise inherit them while the
+        // `dotnet` muxer selects a newer SDK (e.g. 10.0.301), and restore dies exit-1 with no output.
+        DotnetProcessEnvironment.StripMSBuildLocatorVariables(startInfo);
 
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException($"Failed to start 'dotnet restore' for {solutionPath}.");
